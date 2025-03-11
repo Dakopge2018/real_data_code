@@ -4,7 +4,7 @@ library(ggplot2)
 
 # Définir les paramètres du modèle
 set.seed(123)
-n <- 365 * 10  # Nombre de jours simulés (3 ans de données)
+n <- 365 * 5  # Nombre de jours simulés (3 ans de données)
 states <- 2    # Nombre d'états
 degree_obs_pol <- 1  # Degré des covariables trigonométriques
 degree_trans_pol <- 1  # Degré des covariables trigonométriques
@@ -122,15 +122,14 @@ mod <- depmix(
   data = data,
   nstates = 2,
   family = gaussian(),
-  transition = transition_formula,
-  nstart = 10000)
+  transition = transition_formula)
 
 set.seed(1)
 fitted_model  <- multistart(mod,
-  nstart = 10,  # 10 initialisations différentes
-  initIters = 10,  # 10 itérations EM pour chaque initialisation
+  nstart = 50,  # 10 initialisations différentes
+  initIters = 30,  # 10 itérations EM pour chaque initialisation
   emcontrol = em.control(
-    maxit = 500,  # Max 500 itérations EM
+    maxit = 50000,  # Max 500 itérations EM
     tol = 1e-08,  # Tolérance pour convergence
     crit = "relative",  # Critère de convergence
     random.start = TRUE,  # Randomisation des initialisations
@@ -297,15 +296,15 @@ estimated_Q22 <- sapply(1:n, function(t) compute_simulated_transition_probs(t, p
 estimated_Q12 <- sapply(1:n, function(t) compute_simulated_transition_probs(t, period, est_beta_matrix, states, degree_trans_pol)[1, 2])
 estimated_Q21 <- sapply(1:n, function(t) compute_simulated_transition_probs(t, period, est_beta_matrix, states, degree_trans_pol)[2, 1])
 comparison_Q11 <- data.frame(
-  Time = 1:200,
-  Simulated = simulated_Q11[1:200],
-  Estimated = estimated_Q22[1:200]
+  Time = 1:700,
+  Simulated = simulated_Q11[1:700],
+  Estimated = estimated_Q11[1:700]
 )
 
 comparison_Q22 <- data.frame(
-  Time = 1:200,
-  Simulated = simulated_Q22[1:200],
-  Estimated = estimated_Q11[1:200]
+  Time = 1:700,
+  Simulated = simulated_Q22[1:700],
+  Estimated = estimated_Q22[1:700]
 )
 
  # Tracer les probabilités de transition pour comparaison
@@ -325,18 +324,24 @@ ggplot(comparison_Q22, aes(x = Time)) +
        color = "Legend") +
   theme_minimal()
 
+state1 <- rep(1, n)
+state2 <- rep(2, n)
 
-# Convertir les données en format long pour ggplot
-df_xi <- data.frame(Time = 1:200, 
-                    q12 = xi[1:200, 1, 2], 
-                    q21 = xi[1:200, 2, 1])
+observations_state1 <- simulate_observations(state1, n, period, mu, delta, sd, degree_obs_pol)
+observations_state2 <- simulate_observations(state2, n, period, mu, delta, sd, degree_obs_pol)
 
-# Tracer l'évolution des probabilités de transition
-ggplot(df_xi, aes(x = Time)) +
-  geom_line(aes(y = q12, color = "q12: 1 → 2")) +
-  geom_line(aes(y = q21, color = "q21: 2 → 1")) +
-  labs(title = "Évolution des probabilités de transition au fil du temps",
-       x = "Temps",
-       y = "Probabilité de transition") +
-  theme_minimal() +
-  scale_color_manual(values = c("red", "blue"))
+# Combine the data into a single data frame
+realizations <- data.frame(
+  Time = rep(1:n, 2),
+  Observations = c(observations_state1, observations_state2),
+  State = factor(rep(c("State 1", "State 2"), each = n))
+)
+
+# Plot the data using ggplot2
+ggplot(realizations, aes(x = Time, y = Observations, color = State)) +
+  geom_line() +
+  labs(title = "Realization of Y1 to Y1000 for State 1 and State 2",
+       x = "Time",
+       y = "Observations",
+       color = "State") +
+  theme_minimal()

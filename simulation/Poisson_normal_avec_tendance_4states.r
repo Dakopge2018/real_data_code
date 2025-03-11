@@ -5,7 +5,7 @@ library(ggplot2)
 # Model parameters
 set.seed(123)
 n <- 365 * 5
-states <- 2
+states <- 4
 degree_obs_pol <- 1
 degree_trans_pol <- 1
 period <- 365
@@ -193,50 +193,3 @@ ggplot(comparison_Q11, aes(x = Time)) +
        y = "Q22(t)",
        color = "Legend") +
   theme_minimal()
-
-
-# Modified simulation from fitted model for Poisson
-simulate_observations_from_fitted <- function(fitted_model, states, n, period, degree) {
- observations <- numeric(n)
- for (t in 1:n) {
-   k <- ifelse(states[t] == 1, 2, 1)
-   print((states[t]-k))
-   response_model <- fitted_model@response[[k]][[1]]@parameters
-   response_params <- response_model$coefficients
-   
-   lambda_t <- exp(response_params[1])  # Intercept
-   for (d in 1:degree) {
-     lambda_t <- lambda_t * exp(response_params[2 * d +1] * sin(2 * pi * d * t / period) + 
-                               response_params[2 * d] * cos(2 * pi * d * t / period))
-   }
-   observations[t] <- rpois(1, lambda = lambda_t)
- }
- return(observations)
-}
-
-# Rest of comparison and plotting code remains the same
-# fitted_states <- simulate_states_from_fitted(fitted_model, n, period, degree_trans_pol)
-fitted_states = posterior(fitted_model)$state
-fitted_observations <- simulate_observations_from_fitted(fitted_model, fitted_states, n, period, degree_obs_pol)
-
-comparison <- data.frame(
- Time = 1:n,
- States = simulated_states,
- Simulated = observations,
- Fitted = fitted_observations
-)
-
-comparison_2 <- data.frame(
- Time = 1:n,
- States = simulated_states,
- Fitted = fitted_states
-)
-
-# Plotting and metrics
-ggplot(comparison[1:100,], aes(x = Time)) +
- geom_line(aes(y = Simulated, color = "Simulated")) +
- geom_line(aes(y = Fitted, color = "Fitted")) +
- labs(title = "Comparison of Simulated and Fitted Observations (Poisson)",
-      y = "Count",
-      color = "Legend") +
- theme_minimal()

@@ -47,18 +47,21 @@ f_simulate_states <- function(n, period, beta_matrix, K, degree) {
   }
   return(states)
 }
-# Generalized function to compute trigonometric covariates
-generate_trig_covariates <- function(time, period, degree) {
-  trig_covs <- data.frame(time = time)
-  for (d in 1:degree) {
-    cos_term <- cos(2 * pi * d * time / period)
-    sin_term <- sin(2 * pi * d * time / period)
-    trig_covs[[paste0("cos_", d)]] <- cos_term
-    trig_covs[[paste0("sin_", d)]] <- sin_term
-    # trig_covs[[paste0("Exp(cos_", d, "+sin_", d, ")")]] <- exp(cos_term + sin_term)
-  }
-  return(trig_covs)
-}
+
+# Paramètres pour la transition saisonnière
+beta <- list(
+  c(1, 0.7, 0.5),     # Transitions de l'état 1 vers 2 d'autres
+  c(-1, -0.6, 0.7)   # Transitions de l'état 2 vers 2 d'autres
+)
+
+# Créer une matrice de coefficients pour les transitions
+beta_matrix <- matrix(beta, nrow = states, ncol = states - 1, byrow = TRUE)
+
+# Simuler les états
+simulated_states <- f_simulate_states(n, period, beta_matrix, states, degree_trans_pol)
+
+# Résumé des résultats
+table(simulated_states)
 
 # Modified observation simulation for Poisson
 simulate_observations <- function(states, n, period, mu, delta, degree) {
@@ -75,19 +78,20 @@ simulate_observations <- function(states, n, period, mu, delta, degree) {
  return(observations)
 }
 
-# Parameters
-beta <- list(
- c(1, 0.7, 0.5),
- c(-1, -0.6, 0.7)
-)
-beta_matrix <- matrix(beta, nrow = states, ncol = states - 1, byrow = TRUE)
+# Generalized function to compute trigonometric covariates
+generate_trig_covariates <- function(time, period, degree) {
+  trig_covs <- data.frame(time = time)
+  for (d in 1:degree) {
+    trig_covs[[paste0("sin_", d)]] <- sin(2 * pi * d * time / period)
+    trig_covs[[paste0("cos_", d)]] <- cos(2 * pi * d * time / period)}
+  return(trig_covs)
+}
 
 # Modified emission parameters for Poisson
 mu <- c(2, 0.7)  # Log baseline rates
 delta <- matrix(c(1, 0.7, -0.9, 0.1), nrow = states, byrow = TRUE)
 
 # Simulate data
-simulated_states <- f_simulate_states(n, period, beta_matrix, states, degree_trans_pol)
 trig_covs <- generate_trig_covariates(time, period, degree_trans_pol)
 observations <- simulate_observations(simulated_states, n, period, mu, delta, degree_obs_pol)
 
@@ -105,22 +109,22 @@ mod <- depmix(
  response = obs_formula,
  data = data,
  nstates = 2,
- family = poisson(),  # Changed to Poisson
+ family = poisson(link = "log"),  # Changed to Poisson
  transition = transition_formula)
 
 set.seed(1)
 fitted_model  <- multistart(mod,
-  nstart = 1000,  # 10 initialisations différentes
-  initIters = 20,  # 10 itérations EM pour chaque initialisation
+  nstart = 50,  # 10 initialisations différentes
+  initIters = 30,  # 10 itérations EM pour chaque initialisation
   emcontrol = em.control(
-    maxit = 500,  # Max 500 itérations EM
+    maxit = 50000,  # Max 500 itérations EM
     tol = 1e-08,  # Tolérance pour convergence
     crit = "relative",  # Critère de convergence
     random.start = TRUE,  # Randomisation des initialisations
     classification = "Hard"  # Classification 
     ))
 
-fitted_model <- fit(mod, verbose = TRUE)
+#fitted_model <- fit(mod, verbose = TRUE)
 summary(fitted_model, which='transition')
 summary(fitted_model, which='response')
 
@@ -130,13 +134,14 @@ simulate_observations_from_fitted <- function(fitted_model, states, n, period, d
  observations <- numeric(n)
  for (t in 1:n) {
    k <- ifelse(states[t] == 1, 2, 1)
+   print((states[t]-k))
    response_model <- fitted_model@response[[k]][[1]]@parameters
    response_params <- response_model$coefficients
    
    lambda_t <- exp(response_params[1])  # Intercept
    for (d in 1:degree) {
-     lambda_t <- lambda_t * exp(response_params[2 * d] * sin(2 * pi * d * t / period) + 
-                               response_params[2 * d + 1] * cos(2 * pi * d * t / period))
+     lambda_t <- lambda_t * exp(response_params[2 * d +1] * sin(2 * pi * d * t / period) + 
+                               response_params[2 * d] * cos(2 * pi * d * t / period))
    }
    observations[t] <- rpois(1, lambda = lambda_t)
  }
@@ -153,6 +158,12 @@ comparison <- data.frame(
  States = simulated_states,
  Simulated = observations,
  Fitted = fitted_observations
+)
+
+comparison_2 <- data.frame(
+ Time = 1:n,
+ States = simulated_states,
+ Fitted = fitted_states
 )
 
 # Plotting and metrics
