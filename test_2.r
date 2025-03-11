@@ -8,8 +8,8 @@ library(RColorBrewer)  # Pour gérer plusieurs couleurs d'états
 # Model parameters
 set.seed(123)
 states <- 4
-degree_obs_pol <- 1
-degree_trans_pol <- 1
+degree_obs_pol <- 2
+degree_trans_pol <- 2
 period <- 52
 
 
@@ -44,7 +44,11 @@ df <- df[is.finite(rowSums(df)), ]
 
 # Ensure no NA, NaN, or Inf values in the covariates or response variables
 df <- df[complete.cases(df), ]
-donnees <- df
+# donnees <- df
+obs_formula_death <- as.formula(paste("death ~", paste(c(names(trig_covs)[-1], "log_exposure"), collapse = " + ")))
+obs_formula_temp <- as.formula(paste("temp ~", paste(c(names(trig_covs)[-1]), collapse = " + ")))
+
+transition_formula <- as.formula(paste("~", paste(names(trig_covs)[-1], collapse = " + ")))
 #------------------------------------------------
 # FONCTION PRINCIPALE: ESTIMATION ET SIMULATION HMM
 #------------------------------------------------
@@ -54,17 +58,19 @@ estimer_simuler_hmm <- function(donnees, nb_etats = 2, n_simulations = 1,
                                plot_results = TRUE) {
   
   # Vérification des données d'entrée
-  if(!all(c("death", "temp", "cos_1", "sin_1") %in% names(donnees))) {
-    stop("Les données doivent contenir les colonnes: death, temp, cos_1, sin_1")
-  }
+  # if(!all(c("death", "temp", "cos_1", "sin_1") %in% names(donnees))) {
+  #   stop("Les données doivent contenir les colonnes: death, temp, cos_1, sin_1")
+  # }
   
+
+
   # Définition du modèle HMM
   cat(paste("Définition d'un modèle HMM à", nb_etats, "états...\n"))
-  modele_hmm <- depmix(list(death~ sin_1 + cos_1 + trend + log_exposure, temp ~ sin_1 + cos_1 + trend), 
+  modele_hmm <- depmix(list(obs_formula_death, obs_formula_temp), 
                       data = donnees,
                       nstates = nb_etats,
                       family = list(poisson(link = 'log'), gaussian()),
-                      transition = ~ cos_1 + sin_1)
+                      transition = transition_formula)
   
   # Affichage de la structure du modèle
   cat("Structure du modèle avant ajustement:\n")
@@ -102,8 +108,7 @@ estimer_simuler_hmm <- function(donnees, nb_etats = 2, n_simulations = 1,
       death = sim_data@response[[1]][[1]]@y,
       temp = sim_data@response[[1]][[2]]@y,
       etat = donnees$etat,
-      cos_1 = donnees$cos_1,  # Utilisation des mêmes covariables
-      sin_1= donnees$sin_1,
+      trig_covs,
       simulation_id = i
     )
     
@@ -337,18 +342,27 @@ comparer_modeles <- function(donnees, max_etats = 4) {
     nb_etats = 2:max_etats,
     logLik = NA,
     AIC = NA,
-    BIC = NA
+    BIC = NA,
+    degree_of_freedom = NA,
+    LRT_p_value = NA
   )
   
   for(i in 2:max_etats) {
     cat(paste("\n\n===== MODÈLE À", i, "ÉTATS =====\n\n"))
     res <- estimer_simuler_hmm(donnees, nb_etats = i, plot_results = FALSE)
     
-    resultats_comparaison$logLik[i] <- res$log_likelihood
-    resultats_comparaison$AIC[i] <- res$AIC
-    resultats_comparaison$BIC[i] <- res$BIC
+    resultats_comparaison$logLik[i-1] <- res$log_likelihood[1]
+    resultats_comparaison$AIC[i-1] <- res$AIC
+    resultats_comparaison$BIC[i-1] <- res$BIC
+    resultats_comparaison$degree_of_freedom[i-1] <- attr(logLik(res$modele_ajuste), "df")
   }
-  
+  # Calcul du test du rapport de vraisemblance (LRT)
+  for(i in 2:max_etats) {
+    lrt_stat <- 2 * (resultats_comparaison$logLik[i] - resultats_comparaison$logLik[i-1])
+    lrt_df <- resultats_comparaison$degree_of_freedom[i] - resultats_comparaison$degree_of_freedom[i-1]
+    lrt_p_value <- 1 - pchisq(lrt_stat, lrt_df)
+    resultats_comparaison$LRT_p_value[i-1] <- lrt_p_value
+  }
   # Graphiques de comparaison
   p1 <- ggplot(resultats_comparaison, aes(x = nb_etats, y = AIC)) +
     geom_line() +
@@ -372,11 +386,11 @@ comparer_modeles <- function(donnees, max_etats = 4) {
 # Exemple d'utilisation:
 
 # 1. Comparer différents nombres d'états
-resultats_comparaison <- comparer_modeles(df, max_etats = 4)
+resultats_comparaison <- comparer_modeles(df, max_etats = 3)
 print(resultats_comparaison)
 
 # 2. Modèle avec nombre d'états spécifique (par exemple, le meilleur selon BIC)
-resultats <- estimer_simuler_hmm(df, nb_etats = 6, n_simulations = 1)
+# resultats <- estimer_simuler_hmm(df, nb_etats = 3, n_simulations = 1, plot_results =TRUE)
 
 # 3. Analyse du modèle optimal
 # print(summary(resultats$modele_ajuste))
