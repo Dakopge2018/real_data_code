@@ -4,12 +4,13 @@ library(readxl)
 library(ggplot2)
 library(gridExtra)
 library(RColorBrewer)  # Pour gérer plusieurs couleurs d'états
+library(grid)  # Pour utiliser grid.newpage()
 
 # Model parameters
 set.seed(123)
 states <- 4
-degree_obs_pol <- 2
-degree_trans_pol <- 2
+degree_obs_pol <- 1
+degree_trans_pol <- 1
 period <- 52
 
 
@@ -33,7 +34,7 @@ generate_trig_covariates <- function(week_no, year_no, period, degree) {
 trig_covs <- generate_trig_covariates(data$No_week, data$No_year,period, degree_trans_pol)
 
 df = data.frame(
-    death = round(data$Death_counts/100),
+    death = data$Death_counts/100),
     temp = data$Temperature,
     log_exposure = log(data$Weekly_exposure),
     trend = data$No_year,
@@ -48,13 +49,13 @@ df <- df[complete.cases(df), ]
 obs_formula_death <- as.formula(paste("death ~", paste(c(names(trig_covs)[-1], "log_exposure"), collapse = " + ")))
 obs_formula_temp <- as.formula(paste("temp ~", paste(c(names(trig_covs)[-1]), collapse = " + ")))
 
-transition_formula <- as.formula(paste("~", paste(names(trig_covs)[-1], collapse = " + ")))
+transition_formula <- as.formula(paste("~", paste(names(trig_covs)[c(-2,-1)], collapse = " + ")))
 #------------------------------------------------
 # FONCTION PRINCIPALE: ESTIMATION ET SIMULATION HMM
 #------------------------------------------------
 
 estimer_simuler_hmm <- function(donnees, nb_etats = 2, n_simulations = 1, 
-                               seed = 123, maxit = 500, tol = 1e-8,
+                               seed = 123, maxit = 500, tol = 1e-10,
                                plot_results = TRUE) {
   
   # Vérification des données d'entrée
@@ -79,8 +80,20 @@ estimer_simuler_hmm <- function(donnees, nb_etats = 2, n_simulations = 1,
   # Ajustement du modèle (estimation des paramètres)
   cat("Ajustement du modèle en cours, veuillez patienter...\n")
   set.seed(seed)  # Pour reproductibilité
-  modele_ajuste <- fit(modele_hmm, emcontrol = em.control(maxit = maxit, tol = tol))
+  best_modele_ajuste <- NULL
+  best_logLik <- -Inf
+
+  for (i in 1:20) {  # Ajuster 10 fois
+    modele_ajuste <- fit(modele_hmm, emcontrol = em.control(maxit = maxit, tol = tol, rand.start = TRUE))
+    current_logLik <- logLik(modele_ajuste)
   
+    if (current_logLik > best_logLik) {
+      best_logLik <- current_logLik
+      best_modele_ajuste <- modele_ajuste
+    }
+  }
+
+modele_ajuste <- best_modele_ajuste
   # Vérification de la convergence
   cat("Convergence du modèle:", ifelse(modele_ajuste@message == "Log likelihood converged to within tol. (relative change)", 
                                       "Réussie", paste("Échouée:", modele_ajuste@message)), "\n")
@@ -203,26 +216,33 @@ estimer_simuler_hmm <- function(donnees, nb_etats = 2, n_simulations = 1,
       theme_minimal()
     
     # Distributions des valeurs par état
+    y_limits <- range(c(donnees$death, sim1$death))
     p9 <- ggplot(donnees, aes(x = factor(etat), y = death, fill = factor(etat))) +
       geom_boxplot() +
       scale_fill_manual(values = etat_palette) +
       labs(title = "Distribution des décès par état (données réelles)", 
            x = "État", y = "Nombre de décès", fill = "État") +
-      theme_minimal()
+      theme_minimal()+
+      ylim(y_limits)
     
     p10 <- ggplot(sim1, aes(x = factor(etat), y = death, fill = factor(etat))) +
       geom_boxplot() +
       scale_fill_manual(values = etat_palette) +
       labs(title = "Distribution des décès par état (données simulées)", 
            x = "État", y = "Nombre de décès", fill = "État") +
-      theme_minimal()
+      theme_minimal()+
+      ylim(y_limits)
     
     # Affichage des graphiques en grille
     cat("Affichage des visualisations...\n")
+    grid.newpage()
     grid.arrange(p1, p2, p3, ncol = 1)
+    grid.newpage()
     grid.arrange(p4, p5, p6, ncol = 1)
+    grid.newpage()
     grid.arrange(p7, p8, ncol = 2)
-    grid.arrange(p9, p10, ncol = 2)
+    #grid.newpage()
+    #grid.arrange(p9, p10, ncol = 2)
     
     # Si plusieurs simulations, visualiser la variabilité
     if(n_simulations > 1) {
@@ -386,11 +406,11 @@ comparer_modeles <- function(donnees, max_etats = 4) {
 # Exemple d'utilisation:
 
 # 1. Comparer différents nombres d'états
-resultats_comparaison <- comparer_modeles(df, max_etats = 3)
-print(resultats_comparaison)
+# resultats_comparaison <- comparer_modeles(df, max_etats = 3)
+# print(resultats_comparaison)
 
 # 2. Modèle avec nombre d'états spécifique (par exemple, le meilleur selon BIC)
-# resultats <- estimer_simuler_hmm(df, nb_etats = 3, n_simulations = 1, plot_results =TRUE)
+resultats <- estimer_simuler_hmm(df, nb_etats = 3, n_simulations = 2, plot_results =TRUE)
 
 # 3. Analyse du modèle optimal
 # print(summary(resultats$modele_ajuste))
