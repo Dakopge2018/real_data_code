@@ -5,7 +5,7 @@ library(ggplot2)
 # Model parameters
 set.seed(123)
 n <- 365 * 5
-states <- 4
+states <- 2
 degree_obs_pol <- 1
 degree_trans_pol <- 1
 period <- 365
@@ -86,7 +86,7 @@ beta <- list(
 beta_matrix <- matrix(beta, nrow = states, ncol = states - 1, byrow = TRUE)
 
 # Emission parameters
-mu <- c(2, 0.7)
+mu <- c(0.1, 0.2)
 nu <- c(0, 2)
 delta_poisson <- matrix(c(1, 0.7, -0.9, 0.1), nrow = states, byrow = TRUE)
 delta_normal <- matrix(c(0.5, 0.3, -0.4, 0.2), nrow = states, byrow = TRUE)

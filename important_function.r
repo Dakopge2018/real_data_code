@@ -34,7 +34,8 @@ generate_trig_covariates <- function(week_no, year_no, period, degree) {
 trig_covs <- generate_trig_covariates(data$No_week, data$No_year,period, degree_trans_pol)
 
 df = data.frame(
-    death = data$Death_counts/100),
+    death = data$Death_counts,
+    death_rate = data$Death_counts / data$Weekly_exposure,
     temp = data$Temperature,
     log_exposure = log(data$Weekly_exposure),
     trend = data$No_year,
@@ -46,7 +47,8 @@ df <- df[is.finite(rowSums(df)), ]
 # Ensure no NA, NaN, or Inf values in the covariates or response variables
 df <- df[complete.cases(df), ]
 # donnees <- df
-obs_formula_death <- as.formula(paste("death ~", paste(c(names(trig_covs)[-1], "log_exposure"), collapse = " + ")))
+obs_formula_death <- as.formula(paste("death ~", paste(c(names(trig_covs)[-1], "offset(log_exposure)"), collapse = " + ")))
+obs_formula_death_rate <- as.formula(paste("death_rate ~", paste(c(names(trig_covs)[-1], "offset(log_exposure)"), collapse = " + ")))
 obs_formula_temp <- as.formula(paste("temp ~", paste(c(names(trig_covs)[-1]), collapse = " + ")))
 
 transition_formula <- as.formula(paste("~", paste(names(trig_covs)[c(-2,-1)], collapse = " + ")))
@@ -67,10 +69,10 @@ estimer_simuler_hmm <- function(donnees, nb_etats = 2, n_simulations = 1,
 
   # Définition du modèle HMM
   cat(paste("Définition d'un modèle HMM à", nb_etats, "états...\n"))
-  modele_hmm <- depmix(list(obs_formula_death, obs_formula_temp), 
+  modele_hmm <- depmix(list(obs_formula_death_rate <- as.formula(paste("death_rate ~", paste(c(names(trig_covs)[-1], "offset(log_exposure)"), collapse = " + "))), obs_formula_temp), 
                       data = donnees,
                       nstates = nb_etats,
-                      family = list(poisson(link = 'log'), gaussian()),
+                      family = list(gaussian(), gaussian()),
                       transition = transition_formula)
   
   # Affichage de la structure du modèle
@@ -84,7 +86,7 @@ estimer_simuler_hmm <- function(donnees, nb_etats = 2, n_simulations = 1,
   best_logLik <- -Inf
 
   for (i in 1:20) {  # Ajuster 10 fois
-    modele_ajuste <- fit(modele_hmm, emcontrol = em.control(maxit = maxit, tol = tol, rand.start = TRUE))
+    modele_ajuste <- fit(modele_hmm, emcontrol = em.control(maxit = maxit, tol = tol))
     current_logLik <- logLik(modele_ajuste)
   
     if (current_logLik > best_logLik) {

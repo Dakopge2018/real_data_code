@@ -1,5 +1,7 @@
 # Libraries
 library(depmixS4)
+library(tidyverse)
+library(glm)
 library(ggplot2)
 library(readxl)
 library(gridExtra)
@@ -16,31 +18,46 @@ period <- 52
 data <- read_excel("main_database.xlsx", sheet = "database")
 
 # Check for and handle missing or infinite values
-data <- na.omit(data)
+data <-na.omit(data)
 data <- data[is.finite(rowSums(data[c('year','No_year', 'Temperature', 'Death_counts', 'Weekly_exposure')])), ]
+
+# Vérifier s'il y a des NaN dans la colonne Death_counts
+if (any(is.infinite(log(data$Weekly_exposure)))) {
+  cat("Il y a des valeurs NaN dans la colonne Death_counts.\n")
+} else {
+  cat("Il n'y a pas de valeurs NaN dans la colonne Death_counts.\n")
+}
+
+
 
 generate_trig_covariates <- function(week_no, year_no, period, degree) {
   trig_covs <- data.frame(time = week_no, trend = year_no)
   for (d in 1:degree) {
     trig_covs[[paste0("cos_", d)]] <- cos(2 * pi * d * week_no / period)
-    trig_covs[[paste0("sin_", d)]] <- sin(2 * pi * d * week_no / period)
-  }
+    trig_covs[[paste0("sin_", d)]] <- sin(2 * pi * d * week_no / period)}
   return(trig_covs)
 }
 trig_covs <- generate_trig_covariates(data$No_week, data$No_year,period, degree_trans_pol)
 
 df = data.frame(
-    obs_poisson = round(data$Death_counts/100),
+    obs_poisson = data$Death_counts,
     obs_normal = data$Temperature,
+    rate = data$Death_counts / data$Weekly_exposure,
     log_exposure = log(data$Weekly_exposure),
+    exposure = data$Weekly_exposure,
     trend = data$No_year,
     trig_covs)
 
-df <- na.omit(df)
-df <- df[is.finite(rowSums(df)), ]
+# Calculer les percentiles 5% et 95% pour la colonne obs_poisson
+quantiles_obs_poisson <- quantile(df$obs_poisson, probs = c(0.01, 0.99))
 
-# Ensure no NA, NaN, or Inf values in the covariates or response variables
+# Filtrer les données pour retirer les valeurs en dehors des percentiles 5% et 95% pour obs_poisson
+df <- subset(df, obs_poisson >= quantiles_obs_poisson[1] & obs_poisson <= quantiles_obs_poisson[2])
+
+# Supprimer les lignes avec des valeurs manquantes ou infinies
+df <- na.omit(df)
 df <- df[complete.cases(df), ]
+df <- df[is.finite(rowSums(df)), ]
 
 # visualisation des données
 p1 <- ggplot(df, aes(x=time, y=obs_poisson)) +
@@ -55,28 +72,33 @@ p2 <- ggplot(df, aes(x=time, y=obs_normal)) +
   labs(title="Température observée", x="Temps (semaine)", y="Température (°C)") +
   theme_minimal()
 
-p3 <- ggplot(df, aes(x=obs_normal, y=obs_poisson)) +
+p3 <- ggplot(df, aes(x=time, y=exposure)) +
+  geom_line() +
+  geom_point() +
+  labs(title="Exposure", x="Temps (semaine)", y="Exposure") +
+  theme_minimal()
+
+
+p4 <- ggplot(df, aes(x=obs_normal, y=obs_poisson)) +
   geom_point() +
   geom_smooth(method="loess") +
   labs(title="Relation entre température et décès", 
        x="Température (°C)", y="Nombre de décès") +
   theme_minimal()
 
-grid.arrange(p1, p2, p3, ncol=1)
+grid.arrange(p1, p2, p3,p4, ncol=1)
 
 # Transition formula
 transition_formula <- as.formula(paste("~", paste(names(trig_covs)[c(-1,-2)], collapse = " + ")))
 
 # Model
-mod <- depmix(
-  list(obs_poisson ~ trend + sin_1 + cos_1 + offset(log_exposure), obs_normal ~ trend + sin_1 + cos_1 ),
+mod <- depmix(obs_poisson ~ offset(exposure) + sin_1 + cos_1 , 
   data = df,
+  maxiter = 3,
   nstates = states,
-  family = list(poisson(link = "log"), gaussian()),
-  transition = transition_formula,
-  nstart = 10)
-
-fitted_mod = fit(mod, verbose = TRUE)
+  family = poisson(link = "log")
+)
+fitted_mod = fit(mod)
 set.seed(1)
 
 # fitted_model  <- multistart(mod,
@@ -121,3 +143,12 @@ p6 <- ggplot(df, aes(x=time, y=obs_normal, color=factor(etat))) +
   theme_minimal()
 
 grid.arrange(p4, p5, p6, ncol=1)
+
+model_poisson <- glm((obs_poisson ~offset(log_exposure) +trend + sin_1 + cos_1 ),
+  data = df,
+  family = poisson(link = "log"),
+  nstart = 10,
+  control = list(maxit = 1000))
+
+
+summary(model_poisson)
