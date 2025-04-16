@@ -1,0 +1,111 @@
+# Chargement des packages nécessaires
+library(depmixS4)
+library(readxl)
+library(ggplot2)
+library(gridExtra)
+library(RColorBrewer)  # Pour gérer plusieurs couleurs d'états
+library(grid)  # Pour utiliser grid.newpage()
+library(LaplacesDemon)
+
+# Paramètres du modèle
+set.seed(123)
+states <- 2
+degree_obs_pol <- 1
+degree_trans_pol <- 1
+period <- 52
+
+#------------------------------------------------
+# Importation des données
+data <- read_excel("main_database.xlsx", sheet = "database")
+
+# Vérification et gestion des valeurs manquantes ou infinies
+data <- na.omit(data)
+data <- data[is.finite(rowSums(data[c('year', 'No_year', 'Temperature', 'Death_counts', 'Weekly_exposure')])), ]
+
+# Génération des covariables trigonométriques
+generate_trig_covariates <- function(week_no, year_no, period, degree) {
+  trig_covs <- data.frame(time = week_no, trend = year_no)
+  for (d in 1:degree) {
+    trig_covs[[paste0("cos_", d)]] <- cos(2 * pi * d * week_no / period)
+    trig_covs[[paste0("sin_", d)]] <- sin(2 * pi * d * week_no / period)
+  }
+  return(trig_covs)
+}
+trig_covs <- generate_trig_covariates(data$No_week, data$No_year, period, degree_trans_pol)
+
+# Création du dataframe principal
+df <- data.frame(
+  death = data$Death_counts,
+  death_rate = data$Death_counts / data$Weekly_exposure,
+  temp = data$Temp_extrem,
+  exposure = data$Weekly_exposure,
+  log_exposure = log(data$Weekly_exposure),
+  trend = data$No_year,
+  trig_covs
+)
+
+# Formule de transition
+transition_formula <- as.formula(paste("~", paste(names(trig_covs)[c(-1, -2)], collapse = " + ")))
+
+# Création du modèle de réponse pour depmix
+poisson_response <- GLMresponse(death_rate ~ sin_1 + cos_1, weight = log(exposure),
+  data = df,
+  nstates = 1,
+  family = poisson(link = log)
+)
+
+fitted_mod <- fit(poisson_response)
+print(fitted_mod@parameters$coefficients)
+
+# Modèle Poisson GLM avec un offset (log(exposure))
+mod <- glm(death ~ trend +sin_1 + cos_1 + offset(log(exposure)), 
+           data = df, 
+           family = poisson(link = "log"))
+print(summary(mod))
+
+# Modèle pour la température
+mod2 <- glm(temp ~ trend + sin_1 + cos_1, 
+            data = df, 
+            family = gaussian())
+print(summary(mod2))
+
+# Création des modèles de réponse sans spécifier pstart
+rModels <- list(
+  list(
+    GLMresponse(temp ~ trend + sin_1 + cos_1, 
+                data = df, 
+                family = gaussian()),
+    GLMresponse(death ~ trend + sin_1 + cos_1, 
+                offset = log(exposure),
+                data = df, 
+                family = poisson(link = "log"))
+  ),
+  list(
+    GLMresponse(temp ~ trend + sin_1 + cos_1, 
+                data = df, 
+                family = gaussian()),
+    GLMresponse(death ~ trend + sin_1 + cos_1, 
+                offset = log(exposure),
+                data = df, 
+                family = poisson(link = "log"))
+  )
+)
+
+# Création des probabilités de transition sans spécifier pstart
+transition <- list()
+transition[[1]] <- transInit(~cos_1 + sin_1, nstates = 2, data = df)
+transition[[2]] <- transInit(~cos_1 + sin_1, nstates = 2, data = df)
+
+# Probabilités initiales des états
+#instart <- c(0.5, 0.5)
+inMod <- transInit(~1, ns = 2, ps = instart, data = data.frame(1))
+
+# Création et ajustement du modèle Depmix
+mod <- makeDepmix(response = rModels, transition = transition, prior = inMod, homogeneous = FALSE, data = df, nstates = 2)
+fm <- fit(mod, verbose = TRUE, emc = em.control(random = FALSE))
+print(summary(fm))
+
+# Define the response model for Depmix
+                                                                                                            
+# Print the summary of the fitted model
+print(summary(fitted_model))

@@ -62,13 +62,15 @@ transition_formula <- as.formula(paste("~", paste(names(trig_covs)[c(-2, -1)], c
 estimer_simuler_hmm <- function(donnees, nb_etats = 2, n_simulations = 1, 
                                seed = 123, maxit = 500, tol = 1e-10,
                                plot_results = TRUE) {
+
+  
   
   # Définition du modèle HMM
   cat(paste("Définition d'un modèle HMM à", nb_etats, "états...\n"))
   modele_hmm <- depmix(list(obs_formula_death_rate, obs_formula_temp), 
                       data = df, #donnees,
                       nstates = nb_etats,
-                      family = list(gaussian(), gaussian()),
+                      family = list(gaussian(link = log), gaussian()),
                       transition = transition_formula)
   
   # Affichage de la structure du modèle
@@ -240,12 +242,20 @@ estimer_simuler_hmm <- function(donnees, nb_etats = 2, n_simulations = 1,
     
     # Affichage des graphiques en grille
     cat("Affichage des visualisations...\n")
-    grid.newpage()
+    png("visualization1.png", width=1000, height=800)
     grid.arrange(p1, p2, p3, ncol = 1)
-    grid.newpage()
+    dev.off()
+
+    png("visualization2.png", width=1000, height=800)
     grid.arrange(p4, p5, p6, ncol = 1)
-    # grid.newpage()
-    # grid.arrange(p7, p8, ncol = 2)
+    dev.off()
+
+    png("visualization3.png", width=1000, height=800)
+    grid.arrange(p7, p8, ncol = 2)
+    dev.off()
+    png("visualization4.png", width=1000, height=800)
+    grid.arrange(p9, p10, ncol = 2)
+    dev.off()
     # grid.newpage()
     # grid.arrange(p9, p10, ncol = 2)
     
@@ -335,7 +345,7 @@ resultats_comparaison <- comparer_modeles(df, max_etats = 3)
 # print(resultats_comparaison)
 
 # 2. Modèle avec nombre d'états spécifique (par exemple, le meilleur selon BIC)
-resultats <- estimer_simuler_hmm(df, nb_etats = 2, n_simulations = 1, plot_results = TRUE)
+resultats <- estimer_simuler_hmm(df, nb_etats = 3, n_simulations = 1, plot_results = TRUE)
 
 # 3. Analyse du modèle optimal
 # print(summary(resultats$modele_ajuste))
