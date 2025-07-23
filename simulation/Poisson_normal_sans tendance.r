@@ -180,20 +180,39 @@ comparison_Q22 <- data.frame(
 )
 
 # Tracer les probabilités de transition pour comparaison
-ggplot(comparison_Q11, aes(x = Time)) +
+# ggplot(comparison_Q11, aes(x = Time)) +
+#   geom_line(aes(y = Simulated, color = "Simulated")) +
+#   geom_line(aes(y = Estimated, color = "Estimated")) +
+#   labs(title = "Comparison of Simulated and Estimated Q11(t)",
+#        y = "Q11(t)",
+#        color = "Legend") +
+#   theme_minimal()
+#   ggplot(comparison_Q22, aes(x = Time)) +
+#   geom_line(aes(y = Simulated, color = "Simulated")) +
+#   geom_line(aes(y = Estimated, color = "Estimated")) +
+#   labs(title = "Comparison of Simulated and Estimated Q22(t)",
+#        y = "Q22(t)",
+#        color = "Legend") +
+#   theme_minimal()
+# Tracer les probabilités de transition pour comparaison
+p_Q11 <- ggplot(comparison_Q11, aes(x = Time)) +
   geom_line(aes(y = Simulated, color = "Simulated")) +
   geom_line(aes(y = Estimated, color = "Estimated")) +
   labs(title = "Comparison of Simulated and Estimated Q11(t)",
        y = "Q11(t)",
        color = "Legend") +
   theme_minimal()
-  ggplot(comparison_Q22, aes(x = Time)) +
+ggsave("Q11_comparison.pdf", plot = p_Q11, width = 7, height = 5)
+
+p_Q22 <- ggplot(comparison_Q22, aes(x = Time)) +
   geom_line(aes(y = Simulated, color = "Simulated")) +
   geom_line(aes(y = Estimated, color = "Estimated")) +
   labs(title = "Comparison of Simulated and Estimated Q22(t)",
        y = "Q22(t)",
        color = "Legend") +
   theme_minimal()
+ggsave("Q22_comparison.pdf", plot = p_Q22, width = 7, height = 5)
+
 
 
 # Modified simulation from fitted model for Poisson
@@ -250,7 +269,34 @@ mae <- mean(abs(comparison_poisson$Simulated - comparison_poisson$Fitted))
 cor_coef <- cor(comparison_poisson$Simulated, comparison_poisson$Fitted)
 
 # Graphique pour les observations Poisson
-ggplot(comparison_poisson[1:100,], aes(x = Time)) +
+# ggplot(comparison_poisson[1:100,], aes(x = Time)) +
+#   geom_line(aes(y = Simulated, color = "Simulated"), size = 1) +
+#   geom_line(aes(y = Fitted, color = "Fitted"), size = 1, linetype = "dashed") +
+#   labs(title = "Comparison of Simulated and Fitted Observations (Poisson)",
+#        subtitle = "First 1000 Time Points",
+#        y = "Count",
+#        color = "Legend") +
+#   theme_minimal() +
+#   theme(plot.title = element_text(hjust = 0.5),
+#         plot.subtitle = element_text(hjust = 0.5),
+#         legend.position = "bottom") +
+#   scale_color_manual(values = c("Simulated" = "blue", "Fitted" = "red"))
+
+# # Graphique pour les observations normales
+# ggplot(comparison_normal[1:1000,], aes(x = Time)) +
+#   geom_line(aes(y = Simulated, color = "Simulated"), size = 1) +
+#   geom_line(aes(y = Fitted, color = "Fitted"), size = 1, linetype = "dashed") +
+#   labs(title = "Comparison of Simulated and Fitted Observations (Normal)",
+#        subtitle = "First 1000 Time Points",
+#        y = "Value",
+#        color = "Legend") +
+#   theme_minimal() +
+#   theme(plot.title = element_text(hjust = 0.5),
+#         plot.subtitle = element_text(hjust = 0.5),
+#         legend.position = "bottom") +
+#   scale_color_manual(values = c("Simulated" = "blue", "Fitted" = "red")
+# Graphique pour les observations Poisson
+p_poisson <- ggplot(comparison_poisson[1:100,], aes(x = Time)) +
   geom_line(aes(y = Simulated, color = "Simulated"), size = 1) +
   geom_line(aes(y = Fitted, color = "Fitted"), size = 1, linetype = "dashed") +
   labs(title = "Comparison of Simulated and Fitted Observations (Poisson)",
@@ -262,9 +308,10 @@ ggplot(comparison_poisson[1:100,], aes(x = Time)) +
         plot.subtitle = element_text(hjust = 0.5),
         legend.position = "bottom") +
   scale_color_manual(values = c("Simulated" = "blue", "Fitted" = "red"))
+ggsave("Poisson_comparison.pdf", plot = p_poisson, width = 7, height = 5)
 
 # Graphique pour les observations normales
-ggplot(comparison_normal[1:1000,], aes(x = Time)) +
+p_normal <- ggplot(comparison_normal[1:1000,], aes(x = Time)) +
   geom_line(aes(y = Simulated, color = "Simulated"), size = 1) +
   geom_line(aes(y = Fitted, color = "Fitted"), size = 1, linetype = "dashed") +
   labs(title = "Comparison of Simulated and Fitted Observations (Normal)",
@@ -275,4 +322,13 @@ ggplot(comparison_normal[1:1000,], aes(x = Time)) +
   theme(plot.title = element_text(hjust = 0.5),
         plot.subtitle = element_text(hjust = 0.5),
         legend.position = "bottom") +
-  scale_color_manual(values = c("Simulated" = "blue", "Fitted" = "red")
+  scale_color_manual(values = c("Simulated" = "blue", "Fitted" = "red"))
+ggsave("Normal_comparison.pdf", plot = p_normal, width = 7, height = 5)
+
+p3_bis <- ggplot(donnees, aes(x = date, y = temp, color = factor(etat))) +
+      geom_line() +
+      geom_point(size = 2) +
+      scale_color_manual(values = etat_palette) +
+      labs(title = "Température extreme par état (données originales)", 
+           x = "Time", y = "Température (°C)", color = "État") +
+      theme_minimal()
