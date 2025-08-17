@@ -6,7 +6,7 @@ OUTER_IMAGE = "C:\\Users\\samue\\OneDrive\\Documents\\cours\\Projet de mémoire\
 
 # Importation des données
 
-data <- read_excel(path_to_data, sheet = "database_2")
+data <- read_excel(path_to_data, sheet = "database_3")
 
 # Model parameters
 set.seed(123)

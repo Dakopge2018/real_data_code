@@ -19,7 +19,7 @@ period <- 52
 path_to_data = "C:\\Users\\samue\\OneDrive\\Documents\\cours\\Projet de mémoire\\git\\real_data_code\\data\\main_database.xlsx"
 OUTER_IMAGE = "C:\\Users\\samue\\OneDrive\\Documents\\cours\\Projet de mémoire\\git\\real_data_code\\image\\nnnn"
 
-data <- read_excel(path_to_data, sheet = "database_2")
+data <- read_excel(path_to_data, sheet = "database_3")
 
 # Check for and handle missing or infinite values
 data <- data[!is.na(data$Death_counts) & !is.infinite(data$Death_counts) & data$Death_counts > 0, ]
@@ -44,6 +44,7 @@ df = data.frame(
     temp = data$Temp_extrem,
     temp_norm = data$Temperature,
     log_exposure = log(data$Weekly_exposure),
+    Age_factor = as.factor(data$Age_group),
     trend = data$No_year,
     trig_covs)
 
@@ -54,7 +55,7 @@ df <- na.omit(df)
 df <- df[complete.cases(df), ]
 # donnees <- df
 obs_formula_death <- as.formula(paste("death ~", paste(c(names(trig_covs)[-1], "offset(log_exposure)"), collapse = " + ")))
-obs_formula_death_rate <- as.formula(paste("death_rate ~", paste(c(names(trig_covs)[-1], "offset(log_exposure)"), collapse = " + ")))
+# obs_formula_death_rate <- as.formula(paste("death_rate ~", paste(c(names(trig_covs)[-1], "offset(log_exposure)"), collapse = " + ")))
 obs_formula_temp <- as.formula(paste("temp ~", paste(c(names(trig_covs)[-1]), collapse = " + ")))
 
 transition_formula <- as.formula(paste("~", paste(names(trig_covs)[c(-2,-1)], collapse = " + ")))
@@ -75,7 +76,7 @@ estimer_simuler_hmm <- function(donnees, ext, nb_etats = 2, n_simulations = 1,
 
   # Définition du modèle HMM
   cat(paste("Définition d'un modèle HMM à", nb_etats, "états...\n"))
-  modele_hmm <- depmix(list(obs_formula_death_rate <- as.formula(paste("death_rate ~", paste(c(names(trig_covs)[-1], "offset(log_exposure)"), collapse = " + "))), obs_formula_temp), 
+  modele_hmm <- depmix(list(obs_formula_death_rate <- as.formula(paste("death_rate ~ Age_factor +",  paste(c(names(trig_covs)[-1], "offset(log_exposure)"), collapse = " + "))), obs_formula_temp), 
                       data = donnees,
                       nstates = nb_etats,
                       family = list(gaussian(), gaussian()),
@@ -270,21 +271,21 @@ modele_ajuste <- best_modele_ajuste
     # png(file.path(OUTER_IMAGE, "visualization2.png"), width=1500, height=1000)
     # grid.arrange(p4, p5, p6, ncol = 1)
     # dev.off()
-    pdf(file.path(OUTER_IMAGE, paste0("nn_visualization2_",nb_etats, ext, ".pdf")), width=8, height=6)
+    pdf(file.path(OUTER_IMAGE, paste0("ag_nn_visualization2_",nb_etats, ext, ".pdf")), width=8, height=6)
     grid.arrange(p4, p5, p6, ncol = 1)
     dev.off()
 
     # png(file.path(OUTER_IMAGE, "visualization3.png"), width=1500, height=1000)
     # grid.arrange(p7, p8, ncol = 2)
     # dev.off()
-    pdf(file.path(OUTER_IMAGE, paste0("nn_visualization3_",nb_etats, ext, ".pdf")), width=10, height=8)
+    pdf(file.path(OUTER_IMAGE, paste0("ag_nn_visualization3_",nb_etats, ext, ".pdf")), width=10, height=8)
     grid.arrange(p7, p8, ncol = 2)
     dev.off()
 
     # png(file.path(OUTER_IMAGE, "visualization4.png"), width=1500, height=1000)
     # grid.arrange(p9, p10, ncol = 2)
     # dev.off()
-    pdf(file.path(OUTER_IMAGE, paste0("nn_visualization4_",nb_etats, ext, ".pdf")), width=10, height=8)
+    pdf(file.path(OUTER_IMAGE, paste0("ag_nn_visualization4_",nb_etats, ext, ".pdf")), width=10, height=8)
     grid.arrange(p9, p10, ncol = 2)
     dev.off()
     
@@ -386,22 +387,21 @@ comparer_modeles <- function(donnees, max_etats = 4) {
   return(resultats_comparaison)
 }
 
-# Exemple d'utilisation:
-
-# 1. Comparer différents nombres d'états
-# resultats_comparaison <- comparer_modeles(df, max_etats = 3)
-# print(resultats_comparaison)
-
-# 2. Modèle avec nombre d'états spécifique (par exemple, le meilleur selon BIC)
-#resultats <- estimer_simuler_hmm(df, nb_etats = 3, n_simulations = 2, plot_results =TRUE)
-
-# 3. Analyse du modèle optimal
-# print(summary(resultats$modele_ajuste))
-
-# COMMENTAIRE: Décommentez les lignes ci-dessus selon vos besoins
-# Pour l'exécution complète, exécutez les 3 étapes
+# resultats = list()
+# for (code in unique(df$Code)) {
+#   df_sub <- subset(df, Code == code)
+#   resultats[[as.character(code)]] <- estimer_simuler_hmm(df_sub, ext = code, nb_etats = 2, n_simulations = 1, plot_results = FALSE)
+# }
 resultats = list()
 for (code in unique(df$Code)) {
   df_sub <- subset(df, Code == code)
-  resultats[[as.character(code)]] <- estimer_simuler_hmm(df_sub, ext = code, nb_etats = 3, n_simulations = 1, plot_results = TRUE)
+  # Nettoyage supplémentaire
+  df_sub <- df_sub[complete.cases(df_sub), ]
+  df_sub <- df_sub[apply(df_sub, 1, function(x) all(is.finite(x))), ]
+  # Vérifier qu'il reste assez de données et de modalités
+  if (nrow(df_sub) > 10 && length(unique(df_sub$Age_factor)) > 1) {
+    resultats[[as.character(code)]] <- estimer_simuler_hmm(df_sub, ext = code, nb_etats = 2, n_simulations = 1, plot_results = FALSE)
+  } else {
+    cat("Code", code, ": données insuffisantes ou Age_factor unique, modèle ignoré.\n")
+  }
 }
